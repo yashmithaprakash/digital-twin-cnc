@@ -1,0 +1,40 @@
+# Virtual Environment
+.venv/
+env/
+venv/
+ENV/
+
+# Python cache & artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Streamlit temporary files
+.streamlit/secrets.toml
+
+# IDE & Editor files
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# OS files
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+.DS_Store
+
+# Temporary SQLite WAL files
+*.db-shm
+*.db-wal
+edge_hist_tmp*
+opera_hist_tmp*
+*.tmp
+
+# Logs
+*.log
