@@ -144,16 +144,19 @@ class ToolWearModel:
         return float(np.clip(pct, 0.0, 100.0))
 
     def save(self, filepath: Optional[Path] = None):
-        """Save fitted model artifact to disk."""
+        """Save fitted model artifact to disk safely."""
         target_path = filepath or WEAR_MODEL_PATH
-        target_path.parent.mkdir(parents=True, exist_ok=True)
-        joblib.dump({
-            "pipeline": self.pipeline,
-            "feature_names": self.feature_names,
-            "metrics": self.metrics,
-            "feature_importances": self.feature_importances_,
-            "model_type": self.model_type
-        }, str(target_path))
+        try:
+            target_path.parent.mkdir(parents=True, exist_ok=True)
+            joblib.dump({
+                "pipeline": self.pipeline,
+                "feature_names": self.feature_names,
+                "metrics": self.metrics,
+                "feature_importances": self.feature_importances_,
+                "model_type": self.model_type
+            }, str(target_path))
+        except Exception as e:
+            print(f"Notice: Model saving skipped ({e})")
 
     def load(self, filepath: Optional[Path] = None) -> bool:
         """Load model artifact from disk."""
@@ -162,13 +165,15 @@ class ToolWearModel:
             return False
         try:
             data = joblib.load(str(target_path))
-            self.pipeline = data["pipeline"]
-            self.feature_names = data["feature_names"]
-            self.metrics = data["metrics"]
+            self.pipeline = data.get("pipeline")
+            self.feature_names = data.get("feature_names", [])
+            self.metrics = data.get("metrics", {})
             self.feature_importances_ = data.get("feature_importances", {})
             self.model_type = data.get("model_type", "random_forest")
-            self.is_trained = True
-            return True
+            if self.pipeline is not None and len(self.feature_names) >= 3 and len(self.metrics) > 0:
+                self.is_trained = True
+                return True
+            return False
         except Exception as e:
             print(f"Error loading model from {target_path}: {e}")
             return False
@@ -180,12 +185,15 @@ def get_trained_tool_wear_model(sample_df: Optional[pd.DataFrame] = None) -> Too
     Loads from disk if available, otherwise trains on sample_df.
     """
     model = ToolWearModel()
-    if model.load():
+    if model.load() and model.is_trained and len(model.metrics) > 0:
         return model
 
     if sample_df is not None:
-        model.train(sample_df)
-        model.save()
-        return model
+        try:
+            model.train(sample_df)
+            model.save()
+            return model
+        except Exception as e:
+            print(f"Notice: Failed to train wear model on sample_df: {e}")
 
-    raise RuntimeError("No saved model found and no training data provided.")
+    raise RuntimeError("No valid saved wear model found and dataset training failed.")

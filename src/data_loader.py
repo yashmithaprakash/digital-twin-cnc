@@ -29,125 +29,155 @@ from utils.config import (
 # ==============================================================================
 
 def get_db_connection():
-    """Create or connect to the local SQLite database."""
-    conn = sqlite3.connect(str(DB_PATH), check_same_thread=False)
+    """Create or connect to the local SQLite database safely."""
+    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(str(DB_PATH), timeout=30.0, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     return conn
 
 
 def init_db():
-    """Initialize database tables for telemetry, alerts, and maintenance logs."""
-    conn = get_db_connection()
-    cursor = conn.cursor()
+    """Initialize database tables for telemetry, alerts, and maintenance logs safely."""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
 
-    # Telemetry snapshots table
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS telemetry_logs (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-            cut_id INTEGER,
-            force_x REAL,
-            force_y REAL,
-            force_z REAL,
-            force_resultant REAL,
-            vibration_x REAL,
-            vibration_y REAL,
-            vibration_z REAL,
-            vibration_rms REAL,
-            ae_rms REAL,
-            spindle_speed REAL,
-            feed_rate REAL,
-            depth_of_cut REAL,
-            flank_wear_um REAL,
-            tool_health_pct REAL,
-            rul_cuts INTEGER,
-            anomaly_status TEXT,
-            data_source TEXT
-        )
-    """)
+        # Telemetry snapshots table
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS telemetry_logs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+                cut_id INTEGER,
+                force_x REAL,
+                force_y REAL,
+                force_z REAL,
+                force_resultant REAL,
+                vibration_x REAL,
+                vibration_y REAL,
+                vibration_z REAL,
+                vibration_rms REAL,
+                ae_rms REAL,
+                spindle_speed REAL,
+                feed_rate REAL,
+                depth_of_cut REAL,
+                flank_wear_um REAL,
+                tool_health_pct REAL,
+                rul_cuts INTEGER,
+                anomaly_status TEXT,
+                data_source TEXT
+            )
+        """)
 
-    # Maintenance events table
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS maintenance_logs (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-            event_type TEXT,
-            tool_id TEXT,
-            flank_wear_at_service REAL,
-            operating_cuts INTEGER,
-            technician TEXT,
-            action_taken TEXT,
-            notes TEXT
-        )
-    """)
+        # Maintenance events table
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS maintenance_logs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+                event_type TEXT,
+                tool_id TEXT,
+                flank_wear_at_service REAL,
+                operating_cuts INTEGER,
+                technician TEXT,
+                action_taken TEXT,
+                notes TEXT
+            )
+        """)
 
-    # Anomaly alerts table
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS anomaly_alerts (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-            cut_id INTEGER,
-            severity TEXT,
-            anomaly_score REAL,
-            trigger_feature TEXT,
-            description TEXT
-        )
-    """)
+        # Anomaly alerts table
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS anomaly_alerts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+                cut_id INTEGER,
+                severity TEXT,
+                anomaly_score REAL,
+                trigger_feature TEXT,
+                description TEXT
+            )
+        """)
 
-    conn.commit()
-    conn.close()
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"Warning: Database initialization encountered an issue: {e}")
 
 
 def log_telemetry(record: Dict[str, Any]):
-    """Insert a single telemetry record into SQLite."""
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute("""
-        INSERT INTO telemetry_logs (
-            cut_id, force_x, force_y, force_z, force_resultant,
-            vibration_x, vibration_y, vibration_z, vibration_rms, ae_rms,
-            spindle_speed, feed_rate, depth_of_cut, flank_wear_um,
-            tool_health_pct, rul_cuts, anomaly_status, data_source
-        ) VALUES (
-            :cut_id, :force_x, :force_y, :force_z, :force_resultant,
-            :vibration_x, :vibration_y, :vibration_z, :vibration_rms, :ae_rms,
-            :spindle_speed, :feed_rate, :depth_of_cut, :flank_wear_um,
-            :tool_health_pct, :rul_cuts, :anomaly_status, :data_source
-        )
-    """, record)
-    conn.commit()
-    conn.close()
+    """Insert a single telemetry record into SQLite safely."""
+    try:
+        init_db()
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO telemetry_logs (
+                cut_id, force_x, force_y, force_z, force_resultant,
+                vibration_x, vibration_y, vibration_z, vibration_rms, ae_rms,
+                spindle_speed, feed_rate, depth_of_cut, flank_wear_um,
+                tool_health_pct, rul_cuts, anomaly_status, data_source
+            ) VALUES (
+                :cut_id, :force_x, :force_y, :force_z, :force_resultant,
+                :vibration_x, :vibration_y, :vibration_z, :vibration_rms, :ae_rms,
+                :spindle_speed, :feed_rate, :depth_of_cut, :flank_wear_um,
+                :tool_health_pct, :rul_cuts, :anomaly_status, :data_source
+            )
+        """, record)
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"Notice: Telemetry record logging skipped: {e}")
 
 
 def log_maintenance_event(event_type: str, tool_id: str, flank_wear: float,
                           operating_cuts: int, technician: str, action: str, notes: str = ""):
-    """Insert a maintenance event record."""
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute("""
-        INSERT INTO maintenance_logs (
-            event_type, tool_id, flank_wear_at_service, operating_cuts,
-            technician, action_taken, notes
-        ) VALUES (?, ?, ?, ?, ?, ?, ?)
-    """, (event_type, tool_id, flank_wear, operating_cuts, technician, action, notes))
-    conn.commit()
-    conn.close()
+    """Insert a maintenance event record safely."""
+    try:
+        init_db()
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO maintenance_logs (
+                event_type, tool_id, flank_wear_at_service, operating_cuts,
+                technician, action_taken, notes
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, (event_type, tool_id, flank_wear, operating_cuts, technician, action, notes))
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"Notice: Maintenance event logging skipped: {e}")
 
 
 def get_maintenance_history() -> pd.DataFrame:
-    """Fetch all recorded maintenance events."""
-    conn = get_db_connection()
-    df = pd.read_sql_query("SELECT * FROM maintenance_logs ORDER BY id DESC", conn)
-    conn.close()
-    return df
+    """Fetch all recorded maintenance events safely, returning empty DataFrame on any issue."""
+    try:
+        init_db()
+        conn = get_db_connection()
+        df = pd.read_sql_query("SELECT * FROM maintenance_logs ORDER BY id DESC", conn)
+        conn.close()
+        return df
+    except Exception as e:
+        print(f"Notice: Could not query maintenance history ({e}), returning default empty frame.")
+        return pd.DataFrame(columns=[
+            "id", "timestamp", "event_type", "tool_id",
+            "flank_wear_at_service", "operating_cuts", "technician", "action_taken", "notes"
+        ])
 
 
 def get_telemetry_history(limit: int = 200) -> pd.DataFrame:
-    """Fetch recent telemetry logs."""
-    conn = get_db_connection()
-    df = pd.read_sql_query(f"SELECT * FROM telemetry_logs ORDER BY id DESC LIMIT {limit}", conn)
-    conn.close()
-    return df
+    """Fetch recent telemetry logs safely."""
+    try:
+        init_db()
+        conn = get_db_connection()
+        df = pd.read_sql_query(f"SELECT * FROM telemetry_logs ORDER BY id DESC LIMIT {limit}", conn)
+        conn.close()
+        return df
+    except Exception as e:
+        print(f"Notice: Could not query telemetry history ({e}), returning default empty frame.")
+        return pd.DataFrame(columns=[
+            "id", "timestamp", "cut_id", "force_x", "force_y", "force_z", "force_resultant",
+            "vibration_x", "vibration_y", "vibration_z", "vibration_rms", "ae_rms",
+            "spindle_speed", "feed_rate", "depth_of_cut", "flank_wear_um",
+            "tool_health_pct", "rul_cuts", "anomaly_status", "data_source"
+        ])
 
 
 # ==============================================================================

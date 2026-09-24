@@ -343,14 +343,17 @@ class CNCAnomalyDetector:
     def save(self, filepath: Optional[Path] = None):
         """Save anomaly model to disk."""
         target_path = filepath or ANOMALY_MODEL_PATH
-        target_path.parent.mkdir(parents=True, exist_ok=True)
-        joblib.dump({
-            "model": self.model,
-            "scaler": self.scaler,
-            "feature_names": self.feature_names,
-            "baseline_stats": self.baseline_stats,
-            "contamination": self.contamination
-        }, str(target_path))
+        try:
+            target_path.parent.mkdir(parents=True, exist_ok=True)
+            joblib.dump({
+                "model": self.model,
+                "scaler": self.scaler,
+                "feature_names": self.feature_names,
+                "baseline_stats": self.baseline_stats,
+                "contamination": self.contamination
+            }, str(target_path))
+        except Exception as e:
+            print(f"Notice: Anomaly detector saving skipped ({e})")
 
     def load(self, filepath: Optional[Path] = None) -> bool:
         """Load anomaly model from disk."""
@@ -359,13 +362,15 @@ class CNCAnomalyDetector:
             return False
         try:
             data = joblib.load(str(target_path))
-            self.model = data["model"]
-            self.scaler = data["scaler"]
+            self.model = data.get("model")
+            self.scaler = data.get("scaler")
             self.feature_names = data.get("feature_names", ANOMALY_FEATURE_COLS)
             self.baseline_stats = data.get("baseline_stats", {})
             self.contamination = data.get("contamination", 0.05)
-            self.is_trained = True
-            return True
+            if self.model is not None and self.scaler is not None and len(self.baseline_stats) > 0:
+                self.is_trained = True
+                return True
+            return False
         except Exception as e:
             print(f"Error loading anomaly detector from {target_path}: {e}")
             return False
@@ -378,8 +383,11 @@ def get_trained_anomaly_detector(sample_df: Optional[pd.DataFrame] = None) -> CN
         return detector
 
     if sample_df is not None:
-        detector.train(sample_df)
-        detector.save()
-        return detector
+        try:
+            detector.train(sample_df)
+            detector.save()
+            return detector
+        except Exception as e:
+            print(f"Notice: Failed to train anomaly detector on sample_df: {e}")
 
-    raise RuntimeError("No saved anomaly model found and no sample data provided.")
+    raise RuntimeError("No valid saved anomaly detector found and dataset training failed.")
